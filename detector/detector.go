@@ -107,6 +107,36 @@ func inspectMailSend(src io.Reader) string {
 	return out.String()
 }
 
+func eval(assignNode *assign.Assign, nodes []*assign.Assign) string {
+	ret := ""
+
+	switch assignNode.Expression.(type) {
+	case *scalar.String:
+		stringNode := assignNode.Expression.(*scalar.String)
+		value := stringNode.Value
+
+		if len(value) > 0 && value[0] == '"' {
+			value = value[1:]
+		}
+		if len(value) > 0 && value[len(value)-1] == '"' {
+			value = value[:len(value)-1]
+		}
+		ret = value
+
+	case *expr.Variable:
+		variableNode := assignNode.Expression.(*expr.Variable)
+		varName := variableNode.VarName.(*node.Identifier).Value
+		ret = findVariableValue(nodes, varName)
+
+	case *expr.FunctionCall:
+		functionCallNode := assignNode.Expression.(*expr.FunctionCall)
+		functionName := funcName(functionCallNode)
+		ret = functionName
+	}
+
+	return ret
+}
+
 // 変数に割り当てられている値を返す
 func findVariableValue(nodes []*assign.Assign, name string) string {
 	ret := ""
@@ -118,23 +148,7 @@ func findVariableValue(nodes []*assign.Assign, name string) string {
 			continue
 		}
 
-		switch assignNode.Expression.(type) {
-		case *scalar.String:
-			stringNode := assignNode.Expression.(*scalar.String)
-			value := stringNode.Value
-
-			if len(value) > 0 && value[0] == '"' {
-				value = value[1:]
-			}
-			if len(value) > 0 && value[len(value)-1] == '"' {
-				value = value[:len(value)-1]
-			}
-			ret = value
-		case *expr.Variable:
-			variableNode := assignNode.Expression.(*expr.Variable)
-			varName := variableNode.VarName.(*node.Identifier).Value
-			ret = findVariableValue(nodes, varName)
-		}
+		ret = eval(assignNode, nodes)
 	}
 
 	return ret
