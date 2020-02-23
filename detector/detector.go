@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/z7zmey/php-parser/node"
 	"github.com/z7zmey/php-parser/node/expr"
@@ -12,6 +13,7 @@ import (
 	"github.com/z7zmey/php-parser/node/scalar"
 	"github.com/z7zmey/php-parser/node/stmt"
 	"github.com/z7zmey/php-parser/php5"
+	"github.com/z7zmey/php-parser/visitor"
 )
 
 type Detector struct {
@@ -26,6 +28,23 @@ func (d *Detector) Detect() string {
 	return inspectMailSend(d.src)
 }
 
+func (d *Detector) DumpAst() {
+	parser := php5.NewParser(d.src, "example.php")
+	parser.Parse()
+
+	for _, e := range parser.GetErrors() {
+		fmt.Println(e)
+	}
+
+	visitor := visitor.PrettyJsonDumper{
+		Writer: os.Stdout,
+	}
+
+	rootNode := parser.GetRootNode()
+
+	rootNode.Walk(&visitor)
+}
+
 func inspectMailSend(src io.Reader) string {
 	parser := php5.NewParser(src, "example.php")
 	parser.Parse()
@@ -34,14 +53,7 @@ func inspectMailSend(src io.Reader) string {
 		fmt.Println(e)
 	}
 
-	// visitor := visitor.PrettyJsonDumper{
-	// 	Writer: os.Stdout,
-	// 	// NsResolver: nsResolver,
-	// }
-
 	rootNode := parser.GetRootNode()
-
-	// rootNode.Walk(&visitor)
 
 	const targetFunctionName = "mb_send_mail"
 
@@ -73,7 +85,18 @@ func inspectMailSend(src io.Reader) string {
 		}
 	}
 
-	mail := findVariableValue(assignNodes, arguments)
+	// mail := findVariableValue(assignNodes, arguments)
+	mail := make(map[string]string, 3)
+	for i, arg := range arguments {
+		switch i {
+		case 0:
+			mail["to"] = findVariableValue(assignNodes, arg)
+		case 1:
+			mail["subject"] = findVariableValue(assignNodes, arg)
+		case 2:
+			mail["body"] = findVariableValue(assignNodes, arg)
+		}
+	}
 
 	var out bytes.Buffer
 	out.WriteString("[件名]:" + "\n")
@@ -85,28 +108,30 @@ func inspectMailSend(src io.Reader) string {
 }
 
 // 変数に割り当てられている値を返す
-func findVariableValue(nodes []*assign.Assign, names []string) map[string]string {
-	keys := []string{"to", "subject", "body"}
-	ret := make(map[string]string, len(keys))
+func findVariableValue(nodes []*assign.Assign, name string) string {
+	ret := ""
 
-	for i, name := range names {
-		for _, assignNode := range nodes {
-			variableNode := assignNode.Variable.(*expr.Variable)
-			variableName := variableNode.VarName.(*node.Identifier).Value
-			if variableName != name {
-				continue
-			}
-			value := assignNode.Expression.(*scalar.String).Value
-			if i < len(keys) {
-				if len(value) > 0 && value[0] == '"' {
-					value = value[1:]
-				}
-				if len(value) > 0 && value[len(value)-1] == '"' {
-					value = value[:len(value)-1]
-				}
-				ret[keys[i]] = value
-			}
+	for _, assignNode := range nodes {
+		variableNode := assignNode.Variable.(*expr.Variable)
+		variableName := variableNode.VarName.(*node.Identifier).Value
+		if variableName != name {
+			continue
 		}
+
+		stringNode, ok := assignNode.Expression.(*scalar.String)
+		if !ok {
+			continue
+		}
+
+		value := stringNode.Value
+
+		if len(value) > 0 && value[0] == '"' {
+			value = value[1:]
+		}
+		if len(value) > 0 && value[len(value)-1] == '"' {
+			value = value[:len(value)-1]
+		}
+		ret = value
 	}
 
 	return ret
