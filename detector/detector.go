@@ -17,9 +17,10 @@ import (
 )
 
 type Detector struct {
-	src         io.Reader
-	parser      *php5.Parser
-	assignNodes []*assign.Assign
+	src           io.Reader
+	parser        *php5.Parser
+	assignNodes   []*assign.Assign
+	functionNodes []*stmt.Function
 }
 
 func NewDetector(src io.Reader) *Detector {
@@ -30,6 +31,7 @@ func (d *Detector) Detect() string {
 	return d.inspectMailSend()
 }
 
+// ASTをダンプ
 func (d *Detector) DumpAst() {
 	parser := php5.NewParser(d.src, "example.php")
 	parser.Parse()
@@ -59,33 +61,35 @@ func (d *Detector) inspectMailSend() string {
 
 	const targetFunctionName = "mb_send_mail"
 
-	var assignNodes []*assign.Assign
 	var arguments []string
 
 	for _, stmtNode := range d.allNode() {
-		expressionNode, ok := stmtNode.(*stmt.Expression)
-		if !ok {
-			continue
-		}
 
-		switch expressionNode.Expr.(type) {
-		case *assign.Assign:
-			node := expressionNode.Expr.(*assign.Assign)
-			assignNodes = append(assignNodes, node)
+		switch stmtNode.(type) {
+		case *stmt.Expression:
+			expressionNode := stmtNode.(*stmt.Expression)
 
-		case *expr.FunctionCall:
-			node := expressionNode.Expr.(*expr.FunctionCall)
+			switch expressionNode.Expr.(type) {
+			case *assign.Assign:
+				node := expressionNode.Expr.(*assign.Assign)
+				d.assignNodes = append(d.assignNodes, node)
 
-			functionName := funcName(node)
-			if functionName != targetFunctionName {
-				continue
+			case *expr.FunctionCall:
+				node := expressionNode.Expr.(*expr.FunctionCall)
+
+				functionName := funcName(node)
+				if functionName != targetFunctionName {
+					continue
+				}
+
+				arguments = argVarNames(node)
 			}
 
-			arguments = argVarNames(node)
+		case *stmt.Function:
+			node := stmtNode.(*stmt.Function)
+			d.functionNodes = append(d.functionNodes, node)
 		}
 	}
-
-	d.assignNodes = assignNodes
 
 	mail := make(map[string]string, 3)
 	for i, arg := range arguments {
@@ -108,6 +112,7 @@ func (d *Detector) inspectMailSend() string {
 	return out.String()
 }
 
+// パースした全てのノードを返す
 func (d *Detector) allNode() []node.Node {
 	rootNode := d.parser.GetRootNode()
 	root := rootNode.(*node.Root)
@@ -116,8 +121,6 @@ func (d *Detector) allNode() []node.Node {
 }
 
 func (d *Detector) eval(n node.Node) string {
-	ret := ""
-
 	switch n.(type) {
 	case *assign.Assign:
 		assignNode := n.(*assign.Assign)
@@ -133,23 +136,42 @@ func (d *Detector) eval(n node.Node) string {
 		if len(value) > 0 && value[len(value)-1] == '"' {
 			value = value[:len(value)-1]
 		}
-		ret = value
+		return value
 
 	case *expr.Variable:
 		variableNode := n.(*expr.Variable)
 		varName := variableNode.VarName.(*node.Identifier).Value
-		ret = d.findVariableValue(varName)
+		return d.findVariableValue(varName)
 
 	case *expr.FunctionCall:
 		functionCallNode := n.(*expr.FunctionCall)
+		functionName := funcName(functionCallNode)
 
-		return d.eval(functionCallNode.Function)
+		functionNode := d.findFunctionDefenition(functionName)
+		return d.eval(functionNode)
 
 	case *stmt.Function:
-		ret = "Function"
+		functionNode := n.(*stmt.Function)
+		for _, stmt := range functionNode.Stmts {
+			return d.eval(stmt)
+		}
+	case *stmt.Return:
+		returnNode := n.(*stmt.Return)
+		return d.eval(returnNode.Expr)
 	}
 
-	return ret
+	return ""
+}
+
+// FunctionCallノードで呼び出してるFunctionノードを探して返す
+func (d *Detector) findFunctionDefenition(functionName string) *stmt.Function {
+	for _, functionNode := range d.functionNodes {
+		if functionName == functionNode.FunctionName.(*node.Identifier).Value {
+			return functionNode
+		}
+	}
+
+	return &stmt.Function{}
 }
 
 // 変数に割り当てられている値を返す

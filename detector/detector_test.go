@@ -25,6 +25,23 @@ $body = $CONSTANT;
 $additional_headers = "追加ヘッダー";
 $additional_parameter = "追加パラメタ";
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+
+		// 関数の戻り値を代入
+		`<?php
+
+$CONSTANT = "本文";
+
+$to = "mail@example.com";
+$subject = get_subject();
+$body = $CONSTANT;
+$additional_headers = "追加ヘッダー";
+$additional_parameter = "追加パラメタ";
+
+function get_subject() {
+	return "件名";
+}
+
+mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 	}
 
 	expected := `[件名]:
