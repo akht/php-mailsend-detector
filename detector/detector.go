@@ -155,6 +155,7 @@ func (d *Detector) eval(n node.Node) string {
 		for _, stmt := range functionNode.Stmts {
 			return d.eval(stmt)
 		}
+
 	case *stmt.Return:
 		returnNode := n.(*stmt.Return)
 		return d.eval(returnNode.Expr)
@@ -176,8 +177,6 @@ func (d *Detector) findFunctionDefenition(functionName string) *stmt.Function {
 
 // 変数に割り当てられている値を返す
 func (d *Detector) findVariableValue(name string) string {
-	ret := ""
-
 	for _, assignNode := range d.assignNodes {
 		variableNode := assignNode.Variable.(*expr.Variable)
 		variableName := variableNode.VarName.(*node.Identifier).Value
@@ -185,10 +184,10 @@ func (d *Detector) findVariableValue(name string) string {
 			continue
 		}
 
-		ret = d.eval(assignNode)
+		return d.eval(assignNode)
 	}
 
-	return ret
+	return ""
 }
 
 // 関数呼び出しを復元する
