@@ -42,6 +42,23 @@ function get_subject() {
 }
 
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+
+		// 関数の戻り値に定数を使用
+		`<?php
+$CONSTANT_SUBJECT = "件名";
+$CONSTANT_BODY = "本文";
+
+$to = "mail@example.com";
+$subject = get_subject();
+$body = $CONSTANT_BODY;
+$additional_headers = "追加ヘッダー";
+$additional_parameter = "追加パラメタ";
+
+function get_subject() {
+	return $CONSTANT_SUBJECT;
+}
+
+mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 	}
 
 	expected := `[件名]:
