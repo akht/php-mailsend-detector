@@ -10,17 +10,17 @@ func TestDetect(t *testing.T) {
 		// 一番素朴なパターン
 		`<?php
 $to = "mail@example.com";
-$subject = "件名";
-$body = "本文";
+$subject = "This is a Subject";
+$body = "This is a Body";
 $additional_headers = "追加ヘッダー";
 $additional_parameter = "追加パラメタ";
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 
 		// 変数に定数を代入
 		`<?php
-$CONSTANT = "本文";
+$CONSTANT = "This is a Body";
 $to = "mail@example.com";
-$subject = "件名";
+$subject = "This is a Subject";
 $body = $CONSTANT;
 $additional_headers = "追加ヘッダー";
 $additional_parameter = "追加パラメタ";
@@ -29,7 +29,7 @@ mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`
 		// 関数の戻り値を代入
 		`<?php
 
-$CONSTANT = "本文";
+$CONSTANT = "This is a Body";
 
 $to = "mail@example.com";
 $subject = get_subject();
@@ -38,15 +38,15 @@ $additional_headers = "追加ヘッダー";
 $additional_parameter = "追加パラメタ";
 
 function get_subject() {
-	return "件名";
+	return "This is a Subject";
 }
 
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 
 		// 関数の戻り値に定数を使用
 		`<?php
-$CONSTANT_SUBJECT = "件名";
-$CONSTANT_BODY = "本文";
+$CONSTANT_SUBJECT = "This is a Subject";
+$CONSTANT_BODY = "This is a Body";
 
 $to = "mail@example.com";
 $subject = get_subject();
@@ -63,17 +63,17 @@ mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`
 		// 文字列結合
 		`<?php
 $to = "mail@example.com";
-$subject = "件" . "名";
-$body = "本" . "文";
+$subject = "This is" . " a Subject";
+$body = "This is a Body" . "";
 $additional_headers = "追加ヘッダー";
 $additional_parameter = "追加パラメタ";
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 	}
 
 	expected := `[件名]:
-件名
+This is a Subject
 [本文]:
-本文`
+This is a Body`
 
 	for _, input := range tests {
 		src := strings.NewReader(input)
