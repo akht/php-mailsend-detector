@@ -9,6 +9,7 @@ import (
 	"github.com/z7zmey/php-parser/node"
 	"github.com/z7zmey/php-parser/node/expr"
 	"github.com/z7zmey/php-parser/node/expr/assign"
+	"github.com/z7zmey/php-parser/node/expr/binary"
 	"github.com/z7zmey/php-parser/node/name"
 	"github.com/z7zmey/php-parser/node/scalar"
 	"github.com/z7zmey/php-parser/node/stmt"
@@ -125,6 +126,10 @@ func (d *Detector) eval(n node.Node) string {
 	case *assign.Assign:
 		assignNode := n.(*assign.Assign)
 		return d.eval(assignNode.Expression)
+
+	case *binary.Concat:
+		expressionNode := n.(*binary.Concat)
+		return d.eval(expressionNode.Left) + d.eval(expressionNode.Right)
 
 	case *scalar.String:
 		stringNode := n.(*scalar.String)

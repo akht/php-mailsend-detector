@@ -59,6 +59,15 @@ function get_subject() {
 }
 
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+
+		// 文字列結合
+		`<?php
+$to = "mail@example.com";
+$subject = "件" . "名";
+$body = "本" . "文";
+$additional_headers = "追加ヘッダー";
+$additional_parameter = "追加パラメタ";
+mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 	}
 
 	expected := `[件名]:
