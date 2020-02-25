@@ -21,12 +21,14 @@ type Detector struct {
 	src     io.Reader
 	parser  *php5.Parser
 	visitor visitor.Visitor
+	env     map[string]node.Node
 }
 
 func NewDetector(src io.Reader) *Detector {
 	return &Detector{
 		src:     src,
 		visitor: visitor.Visitor{},
+		env:     make(map[string]node.Node),
 	}
 }
 
@@ -67,15 +69,17 @@ func (d *Detector) inspectMailSend() string {
 	rootNode := parser.GetRootNode()
 	rootNode.Walk(&d.visitor)
 
+	d.eval(rootNode)
+
 	mail := make(map[string]string, 3)
 	for i, arg := range d.visitor.MailArguments {
 		switch i {
 		case 0:
-			mail["to"] = d.findVariableValue(arg)
+			mail["to"] = d.env[arg].(*scalar.String).Value
 		case 1:
-			mail["subject"] = d.findVariableValue(arg)
+			mail["subject"] = d.env[arg].(*scalar.String).Value
 		case 2:
-			mail["body"] = d.findVariableValue(arg)
+			mail["body"] = d.env[arg].(*scalar.String).Value
 		}
 	}
 
@@ -97,22 +101,31 @@ func (d *Detector) allNode() []node.Node {
 }
 
 func (d *Detector) eval(n node.Node) string {
-	switch n.(type) {
+	switch n := n.(type) {
+	case *node.Root:
+		return d.evalProgram(n)
+
+	case *stmt.Expression:
+		return d.eval(n.Expr)
+
 	case *assign.Assign:
-		assignNode := n.(*assign.Assign)
-		return d.eval(assignNode.Expression)
+		variableName := d.eval(n.Variable)
+		expression := d.eval(n.Expression)
+		d.env[variableName] = &scalar.String{Value: expression}
+
+		return expression
+
+	case *node.Identifier:
+		return n.Value
 
 	case *expr.ConstFetch:
-		constantNode := n.(*expr.ConstFetch)
-		return d.findConstantValue(constantNode)
+		return d.findConstantValue(n)
 
 	case *binary.Concat:
-		expressionNode := n.(*binary.Concat)
-		return d.eval(expressionNode.Left) + d.eval(expressionNode.Right)
+		return d.eval(n.Left) + d.eval(n.Right)
 
 	case *scalar.String:
-		stringNode := n.(*scalar.String)
-		value := stringNode.Value
+		value := n.Value
 
 		if len(value) > 0 && value[0] == '"' {
 			value = value[1:]
@@ -123,31 +136,51 @@ func (d *Detector) eval(n node.Node) string {
 		return value
 
 	case *expr.Variable:
-		variableNode := n.(*expr.Variable)
-		varName := variableNode.VarName.(*node.Identifier).Value
-		return d.findVariableValue(varName)
+		varName := d.eval(n.VarName)
+
+		if val, ok := d.env[varName]; ok {
+			return d.eval(val)
+		}
+
+		return varName
 
 	case *expr.FunctionCall:
-		functionCallNode := n.(*expr.FunctionCall)
-		functionName := funcName(functionCallNode)
+		functionName := funcName(n)
+
+		if functionNode, ok := d.env[functionName]; ok {
+			return d.eval(functionNode)
+		}
 
 		functionNode := d.findFunctionDefenition(functionName)
 		return d.eval(functionNode)
 
 	case *stmt.Function:
-		functionNode := n.(*stmt.Function)
-		for _, stmtNode := range functionNode.Stmts {
-			if returnNode, ok := stmtNode.(*stmt.Return); ok {
-				return d.eval(returnNode.Expr)
+		functionName := d.eval(n.FunctionName)
+		d.env[functionName] = n
+
+		for _, stmtNode := range n.Stmts {
+			statement := d.eval(stmtNode)
+
+			if _, ok := stmtNode.(*stmt.Return); ok {
+				return statement
 			}
 		}
 
 	case *stmt.Return:
-		returnNode := n.(*stmt.Return)
-		return d.eval(returnNode.Expr)
+		return d.eval(n.Expr)
 	}
 
 	return ""
+}
+
+func (d *Detector) evalProgram(root *node.Root) string {
+	result := ""
+
+	for _, statement := range root.Stmts {
+		result = d.eval(statement)
+	}
+
+	return result
 }
 
 // FunctionCallノードで呼び出してるFunctionノードを探して返す
@@ -216,7 +249,6 @@ func funcCallExprStr(funcName string, argVarNames []string) string {
 func funcName(node *expr.FunctionCall) string {
 	functionNode := node.Function.(*name.Name)
 
-	funcName := ""
 	for _, part := range functionNode.Parts {
 		namePartNode, ok := part.(*name.NamePart)
 		if !ok {
@@ -224,12 +256,11 @@ func funcName(node *expr.FunctionCall) string {
 		}
 
 		if namePartNode.Value != "" {
-			funcName = namePartNode.Value
-			break
+			return namePartNode.Value
 		}
 	}
 
-	return funcName
+	return ""
 }
 
 // 関数呼び出しの引数として渡されている変数名を配列で返す

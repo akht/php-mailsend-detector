@@ -9,99 +9,104 @@ func TestDetect(t *testing.T) {
 	tests := []string{
 		// 一番素朴なパターン
 		`<?php
-$to = "mail@example.com";
-$subject = "This is a Subject";
-$body = "This is a Body";
-$additional_headers = "追加ヘッダー";
-$additional_parameter = "追加パラメタ";
-mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+		$to = "mail@example.com";
+		$subject = "This is a Subject";
+		$body = "This is a Body";
+		$additional_headers = "追加ヘッダー";
+		$additional_parameter = "追加パラメタ";
+		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 
 		// 変数に定数を代入
 		`<?php
-define("CONSTANT", "This is a Body");
-$to = "mail@example.com";
-$subject = "This is a Subject";
-$body = CONSTANT;
-$additional_headers = "追加ヘッダー";
-$additional_parameter = "追加パラメタ";
+		define("CONSTANT", "This is a Body");
+		$to = "mail@example.com";
+		$subject = "This is a Subject";
+		$body = CONSTANT;
+		$additional_headers = "追加ヘッダー";
+		$additional_parameter = "追加パラメタ";
 
-mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 
 		// 関数の戻り値を代入
 		`<?php
-$CONSTANT = "This is a Body";
+		$CONSTANT = "This is a Body";
 
-$to = "mail@example.com";
-$subject = get_subject();
-$body = $CONSTANT;
-$additional_headers = "追加ヘッダー";
-$additional_parameter = "追加パラメタ";
+		$to = "mail@example.com";
+		$subject = get_subject();
+		$body = $CONSTANT;
+		$additional_headers = "追加ヘッダー";
+		$additional_parameter = "追加パラメタ";
 
-function get_subject() {
-	$ret = "This is a Subject";
-	return $ret;
-}
+		function get_subject() {
+			$ret = "This is a Subject";
+			return $ret;
+		}
 
-mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 
 		// 関数の戻り値に定数を使用
 		`<?php
-define("CONSTANT_SUBJECT", "This is a Subject");
-define("CONSTANT_BODY", "This is a Body");
+		define("CONSTANT_SUBJECT", "This is a Subject");
+		define("CONSTANT_BODY", "This is a Body");
 
-$to = "mail@example.com";
-$subject = get_subject();
-$body = CONSTANT_BODY;
-$additional_headers = "追加ヘッダー";
-$additional_parameter = "追加パラメタ";
+		$to = "mail@example.com";
+		$subject = get_subject();
+		$body = CONSTANT_BODY;
+		$additional_headers = "追加ヘッダー";
+		$additional_parameter = "追加パラメタ";
 
-function get_subject() {
-	return CONSTANT_SUBJECT;
-}
+		function get_subject() {
+			return CONSTANT_SUBJECT;
+		}
 
-mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 
 		// 文字列結合
 		`<?php
-$to = "mail@example.com";
-$subject = "This is" . " a Subject";
-$body = "This is a Body" . "";
-$additional_headers = "追加ヘッダー";
-$additional_parameter = "追加パラメタ";
-mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+		$to = "mail@example.com";
+		$subject = "This is" . " a Subject";
+		$body = "This is a Body" . "";
+		$additional_headers = "追加ヘッダー";
+		$additional_parameter = "追加パラメタ";
+		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 
 		// 文字列の結合、定数との結合、関数内のローカル変数を参照して返すなど
 		`<?php
-define("CONSTANT_SUBJECT1", "This ");
-define("CONSTANT_SUBJECT2", "is ");
-define("CONSTANT_BODY1", "Thi");
-define("CONSTANT_BODY2", "a");
+		define("CONSTANT_SUBJECT1", "This ");
+		define("CONSTANT_SUBJECT2", "is ");
+		define("CONSTANT_BODY1", "Thi");
+		define("CONSTANT_BODY2", "a");
 
-$to = "mail@example.com";
-$subject = get_subject() . "a Subject";
-$body = CONSTANT_BODY1 . get_body1() . get_body2() . " " . get_body3();
-$additional_headers = "追加ヘッダー";
-$additional_parameter = "追加パラメタ";
+		$to = "mail@example.com";
+		$subject = get_subject() . "a Subject";
+		$body = CONSTANT_BODY1 . get_body1() . get_body2() . " " . get_body3();
+		$additional_headers = "追加ヘッダー";
+		$additional_parameter = "追加パラメタ";
 
-function get_subject() {
-	return CONSTANT_SUBJECT1 . CONSTANT_SUBJECT2;
-}
+		function get_subject() {
+			return CONSTANT_SUBJECT1 . CONSTANT_SUBJECT2;
+		}
 
-function get_body1() {
-    return "s ";
-}
+		function get_body1() {
+		    return "s ";
+		}
 
-function get_body2() {
-	$var = "is";
-    return $var;
-}
+		function get_body2() {
+			$var = "i";
+			$var2 = $var . get_s();
+		    return $var2;
+		}
 
-function get_body3() {
-    $to3 = CONSTANT_BODY2 . " " . "Body";
-    return $to3;
-}
+		function get_body3() {
+		    $to3 = CONSTANT_BODY2 . " " . "Body";
+		    return $to3;
+		}
 
-mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+		function get_s() {
+			return "s";
+		}
+
+		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 	}
 
 	expected := `[件名]:
