@@ -38,7 +38,8 @@ $additional_headers = "追加ヘッダー";
 $additional_parameter = "追加パラメタ";
 
 function get_subject() {
-	return "This is a Subject";
+	$ret = "This is a Subject";
+	return $ret;
 }
 
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
@@ -67,6 +68,39 @@ $subject = "This is" . " a Subject";
 $body = "This is a Body" . "";
 $additional_headers = "追加ヘッダー";
 $additional_parameter = "追加パラメタ";
+mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+
+		// 文字列の結合、定数との結合、関数内のローカル変数を参照して返すなど
+		`<?php
+define("CONSTANT_SUBJECT1", "This ");
+define("CONSTANT_SUBJECT2", "is ");
+define("CONSTANT_BODY1", "Thi");
+define("CONSTANT_BODY2", "a");
+
+$to = "mail@example.com";
+$subject = get_subject() . "a Subject";
+$body = CONSTANT_BODY1 . get_body1() . get_body2() . " " . get_body3();
+$additional_headers = "追加ヘッダー";
+$additional_parameter = "追加パラメタ";
+
+function get_subject() {
+	return CONSTANT_SUBJECT1 . CONSTANT_SUBJECT2;
+}
+
+function get_body1() {
+    return "s ";
+}
+
+function get_body2() {
+	$var = "is";
+    return $var;
+}
+
+function get_body3() {
+    $to3 = CONSTANT_BODY2 . " " . "Body";
+    return $to3;
+}
+
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 	}
 
