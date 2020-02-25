@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os"
+
+	"github.com/akht/php-mailsend-detector/visitor"
 
 	"github.com/z7zmey/php-parser/node"
 	"github.com/z7zmey/php-parser/node/expr"
@@ -14,19 +15,19 @@ import (
 	"github.com/z7zmey/php-parser/node/scalar"
 	"github.com/z7zmey/php-parser/node/stmt"
 	"github.com/z7zmey/php-parser/php5"
-	"github.com/z7zmey/php-parser/visitor"
 )
 
 type Detector struct {
-	src           io.Reader
-	parser        *php5.Parser
-	defineNodes   []*expr.FunctionCall
-	assignNodes   []*assign.Assign
-	functionNodes []*stmt.Function
+	src     io.Reader
+	parser  *php5.Parser
+	visitor visitor.Visitor
 }
 
 func NewDetector(src io.Reader) *Detector {
-	return &Detector{src: src}
+	return &Detector{
+		src:     src,
+		visitor: visitor.Visitor{},
+	}
 }
 
 func (d *Detector) Detect() string {
@@ -43,9 +44,11 @@ func (d *Detector) DumpAst() {
 		fmt.Println(e)
 	}
 
-	visitor := visitor.PrettyJsonDumper{
-		Writer: os.Stdout,
-	}
+	// visitor := visitor.PrettyJsonDumper{
+	// 	Writer: os.Stdout,
+	// }
+
+	visitor := visitor.Visitor{}
 
 	rootNode := parser.GetRootNode()
 
@@ -61,44 +64,11 @@ func (d *Detector) inspectMailSend() string {
 		fmt.Println(e)
 	}
 
-	const targetFunctionName = "mb_send_mail"
-
-	var arguments []string
-
-	for _, stmtNode := range d.allNode() {
-
-		switch stmtNode.(type) {
-		case *stmt.Expression:
-			expressionNode := stmtNode.(*stmt.Expression)
-
-			switch expressionNode.Expr.(type) {
-			case *assign.Assign:
-				node := expressionNode.Expr.(*assign.Assign)
-				d.assignNodes = append(d.assignNodes, node)
-
-			case *expr.FunctionCall:
-				node := expressionNode.Expr.(*expr.FunctionCall)
-
-				functionName := funcName(node)
-				if functionName == "define" {
-					d.defineNodes = append(d.defineNodes, node)
-					continue
-				}
-				if functionName != targetFunctionName {
-					continue
-				}
-
-				arguments = argVarNames(node)
-			}
-
-		case *stmt.Function:
-			node := stmtNode.(*stmt.Function)
-			d.functionNodes = append(d.functionNodes, node)
-		}
-	}
+	rootNode := parser.GetRootNode()
+	rootNode.Walk(&d.visitor)
 
 	mail := make(map[string]string, 3)
-	for i, arg := range arguments {
+	for i, arg := range d.visitor.MailArguments {
 		switch i {
 		case 0:
 			mail["to"] = d.findVariableValue(arg)
@@ -166,8 +136,10 @@ func (d *Detector) eval(n node.Node) string {
 
 	case *stmt.Function:
 		functionNode := n.(*stmt.Function)
-		for _, stmt := range functionNode.Stmts {
-			return d.eval(stmt)
+		for _, stmtNode := range functionNode.Stmts {
+			if returnNode, ok := stmtNode.(*stmt.Return); ok {
+				return d.eval(returnNode.Expr)
+			}
 		}
 
 	case *stmt.Return:
@@ -180,7 +152,7 @@ func (d *Detector) eval(n node.Node) string {
 
 // FunctionCallノードで呼び出してるFunctionノードを探して返す
 func (d *Detector) findFunctionDefenition(functionName string) *stmt.Function {
-	for _, functionNode := range d.functionNodes {
+	for _, functionNode := range d.visitor.FunctionNodes {
 		if functionName == functionNode.FunctionName.(*node.Identifier).Value {
 			return functionNode
 		}
@@ -191,7 +163,7 @@ func (d *Detector) findFunctionDefenition(functionName string) *stmt.Function {
 
 // 変数に割り当てられている値を返す
 func (d *Detector) findVariableValue(name string) string {
-	for _, assignNode := range d.assignNodes {
+	for _, assignNode := range d.visitor.AssignNodes {
 		variableNode := assignNode.Variable.(*expr.Variable)
 		variableName := variableNode.VarName.(*node.Identifier).Value
 		if variableName != name {
@@ -211,7 +183,7 @@ func (d *Detector) findConstantValue(constFecthNode *expr.ConstFetch) string {
 	partsNode := nameNode.Parts[0].(*name.NamePart)
 	constantName := partsNode.Value
 
-	for _, funcCallNode := range d.defineNodes {
+	for _, funcCallNode := range d.visitor.DefineNodes {
 		argumentList := funcCallNode.ArgumentList
 		argument := argumentList.Arguments[0].(*node.Argument)
 		definedConstantName := d.eval(argument.Expr)
