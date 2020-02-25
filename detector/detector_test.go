@@ -18,17 +18,17 @@ mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`
 
 		// 変数に定数を代入
 		`<?php
-$CONSTANT = "This is a Body";
+define("CONSTANT", "This is a Body");
 $to = "mail@example.com";
 $subject = "This is a Subject";
-$body = $CONSTANT;
+$body = CONSTANT;
 $additional_headers = "追加ヘッダー";
 $additional_parameter = "追加パラメタ";
+
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 
 		// 関数の戻り値を代入
 		`<?php
-
 $CONSTANT = "This is a Body";
 
 $to = "mail@example.com";
@@ -45,17 +45,17 @@ mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`
 
 		// 関数の戻り値に定数を使用
 		`<?php
-$CONSTANT_SUBJECT = "This is a Subject";
-$CONSTANT_BODY = "This is a Body";
+define("CONSTANT_SUBJECT", "This is a Subject");
+define("CONSTANT_BODY", "This is a Body");
 
 $to = "mail@example.com";
 $subject = get_subject();
-$body = $CONSTANT_BODY;
+$body = CONSTANT_BODY;
 $additional_headers = "追加ヘッダー";
 $additional_parameter = "追加パラメタ";
 
 function get_subject() {
-	return $CONSTANT_SUBJECT;
+	return CONSTANT_SUBJECT;
 }
 
 mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,

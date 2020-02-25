@@ -20,6 +20,7 @@ import (
 type Detector struct {
 	src           io.Reader
 	parser        *php5.Parser
+	defineNodes   []*expr.FunctionCall
 	assignNodes   []*assign.Assign
 	functionNodes []*stmt.Function
 }
@@ -79,6 +80,10 @@ func (d *Detector) inspectMailSend() string {
 				node := expressionNode.Expr.(*expr.FunctionCall)
 
 				functionName := funcName(node)
+				if functionName == "define" {
+					d.defineNodes = append(d.defineNodes, node)
+					continue
+				}
 				if functionName != targetFunctionName {
 					continue
 				}
@@ -126,6 +131,10 @@ func (d *Detector) eval(n node.Node) string {
 	case *assign.Assign:
 		assignNode := n.(*assign.Assign)
 		return d.eval(assignNode.Expression)
+
+	case *expr.ConstFetch:
+		constantNode := n.(*expr.ConstFetch)
+		return d.findConstantValue(constantNode)
 
 	case *binary.Concat:
 		expressionNode := n.(*binary.Concat)
@@ -190,6 +199,29 @@ func (d *Detector) findVariableValue(name string) string {
 		}
 
 		return d.eval(assignNode)
+	}
+
+	return ""
+}
+
+// 定数に割り当てられている値を返す
+func (d *Detector) findConstantValue(constFecthNode *expr.ConstFetch) string {
+
+	nameNode := constFecthNode.Constant.(*name.Name)
+	partsNode := nameNode.Parts[0].(*name.NamePart)
+	constantName := partsNode.Value
+
+	for _, funcCallNode := range d.defineNodes {
+		argumentList := funcCallNode.ArgumentList
+		argument := argumentList.Arguments[0].(*node.Argument)
+		definedConstantName := d.eval(argument.Expr)
+
+		if definedConstantName != constantName {
+			continue
+		}
+
+		argument = argumentList.Arguments[1].(*node.Argument)
+		return d.eval(argument.Expr)
 	}
 
 	return ""
