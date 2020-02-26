@@ -125,10 +125,10 @@ func (d *Detector) eval(n node.Node) string {
 	case *scalar.String:
 		value := n.Value
 
-		if len(value) > 0 && value[0] == '"' {
+		if len(value) > 0 && (value[0] == '"' || value[0] == '\''){
 			value = value[1:]
 		}
-		if len(value) > 0 && value[len(value)-1] == '"' {
+		if len(value) > 0 && (value[len(value)-1] == '"' || value[len(value)-1] == '\'') {
 			value = value[:len(value)-1]
 		}
 		return value

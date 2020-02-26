@@ -10,7 +10,7 @@ func TestDetect(t *testing.T) {
 		// 一番素朴なパターン
 		`<?php
 		$to = "mail@example.com";
-		$subject = "This is a Subject";
+		$subject = 'This is a Subject';
 		$body = "This is a Body";
 		$additional_headers = "追加ヘッダー";
 		$additional_parameter = "追加パラメタ";
