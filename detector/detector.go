@@ -109,7 +109,7 @@ func (d *Detector) eval(n node.Node) string {
 		return d.eval(n.Expr)
 
 	case *assign.Assign:
-		variableName := d.eval(n.Variable)
+		variableName := n.Variable.(*expr.Variable).VarName.(*node.Identifier).Value
 		expression := d.eval(n.Expression)
 		d.env[variableName] = &scalar.String{Value: expression}
 
@@ -178,7 +178,7 @@ func (d *Detector) evalIdentifier(ident *node.Identifier) string {
 		return d.eval(n)
 	}
 
-	return ident.Value
+	return ""
 }
 
 // FunctionCallノードで呼び出してるFunctionノードを探して返す
