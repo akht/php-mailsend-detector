@@ -31,27 +31,23 @@ func (v *Visitor) EnterNode(w walker.Walkable) bool {
 
 	const targetFunctionName = "mb_send_mail"
 
-	switch n.(type) {
+	switch n := n.(type) {
 	case *assign.Assign:
-		node := n.(*assign.Assign)
-		v.AssignNodes = append(v.AssignNodes, node)
+		v.AssignNodes = append(v.AssignNodes, n)
 
 	case *expr.FunctionCall:
-		node := n.(*expr.FunctionCall)
-
-		functionName := funcName(node)
+		functionName := funcName(n)
 		if functionName == "define" {
-			v.DefineNodes = append(v.DefineNodes, node)
+			v.DefineNodes = append(v.DefineNodes, n)
 		}
 		if functionName != targetFunctionName {
 			return true
 		}
 
-		v.MailArguments = argVarNames(node)
+		v.MailArguments = argVarNames(n)
 
 	case *stmt.Function:
-		node := n.(*stmt.Function)
-		v.FunctionNodes = append(v.FunctionNodes, node)
+		v.FunctionNodes = append(v.FunctionNodes, n)
 	}
 
 	return true
