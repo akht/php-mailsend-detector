@@ -107,6 +107,19 @@ func TestDetect(t *testing.T) {
 		}
 
 		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+
+		// 同じ変数に複数回代入
+		`<?php
+		$to = "mail@example.com";
+		$subject = "This is a ";
+		$subject = $subject . "Subject";
+		$body1 = "This";
+		$body2 = "is";
+		$body3 = "a";
+		$body = $body1 . " " . $body2 . " " . $body3 . " " . "Body";
+		$additional_headers = "追加ヘッダー";
+		$additional_parameter = "追加パラメタ";
+		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 	}
 
 	expected := `[件名]:
