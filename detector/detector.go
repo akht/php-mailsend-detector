@@ -113,10 +113,8 @@ func (d *Detector) eval(n node.Node) string {
 		expression := d.eval(n.Expression)
 		d.env[variableName] = &scalar.String{Value: expression}
 
-		return expression
-
 	case *node.Identifier:
-		return n.Value
+		return d.evalIdentifier(n)
 
 	case *expr.ConstFetch:
 		return d.findConstantValue(n)
@@ -137,11 +135,6 @@ func (d *Detector) eval(n node.Node) string {
 
 	case *expr.Variable:
 		varName := d.eval(n.VarName)
-
-		if val, ok := d.env[varName]; ok {
-			return d.eval(val)
-		}
-
 		return varName
 
 	case *expr.FunctionCall:
@@ -155,9 +148,6 @@ func (d *Detector) eval(n node.Node) string {
 		return d.eval(functionNode)
 
 	case *stmt.Function:
-		functionName := d.eval(n.FunctionName)
-		d.env[functionName] = n
-
 		for _, stmtNode := range n.Stmts {
 			statement := d.eval(stmtNode)
 
@@ -181,6 +171,14 @@ func (d *Detector) evalProgram(root *node.Root) string {
 	}
 
 	return result
+}
+
+func (d *Detector) evalIdentifier(ident *node.Identifier) string {
+	if n, ok := d.env[ident.Value]; ok {
+		return d.eval(n)
+	}
+
+	return ident.Value
 }
 
 // FunctionCallノードで呼び出してるFunctionノードを探して返す
