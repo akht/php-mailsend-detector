@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 
-	"github.com/akht/php-mailsend-detector/visitor"
+	myvisitor "github.com/akht/php-mailsend-detector/visitor"
 
 	"github.com/z7zmey/php-parser/node"
 	"github.com/z7zmey/php-parser/node/expr"
@@ -15,19 +16,20 @@ import (
 	"github.com/z7zmey/php-parser/node/scalar"
 	"github.com/z7zmey/php-parser/node/stmt"
 	"github.com/z7zmey/php-parser/php5"
+	"github.com/z7zmey/php-parser/visitor"
 )
 
 type Detector struct {
 	src     io.Reader
 	parser  *php5.Parser
-	visitor visitor.Visitor
+	visitor myvisitor.Visitor
 	env     map[string]node.Node
 }
 
 func NewDetector(src io.Reader) *Detector {
 	return &Detector{
 		src:     src,
-		visitor: visitor.Visitor{},
+		visitor: myvisitor.Visitor{},
 		env:     make(map[string]node.Node),
 	}
 }
@@ -46,11 +48,9 @@ func (d *Detector) DumpAst() {
 		fmt.Println(e)
 	}
 
-	// visitor := visitor.PrettyJsonDumper{
-	// 	Writer: os.Stdout,
-	// }
-
-	visitor := visitor.Visitor{}
+	visitor := visitor.PrettyJsonDumper{
+		Writer: os.Stdout,
+	}
 
 	rootNode := parser.GetRootNode()
 
@@ -137,6 +137,12 @@ func (d *Detector) eval(n node.Node) string {
 		varName := d.eval(n.VarName)
 		return varName
 
+	case *stmt.If:
+		return d.evalIf(n)
+
+	case *binary.Equal:
+		return d.evalEqual(n)
+
 	case *expr.FunctionCall:
 		functionName := funcName(n)
 
@@ -179,6 +185,44 @@ func (d *Detector) evalIdentifier(ident *node.Identifier) string {
 	}
 
 	return ""
+}
+
+func (d * Detector) evalIf(ifNode *stmt.If) string {
+	condition := d.eval(ifNode.Cond)
+
+	if condition == "true" {
+		stmts := ifNode.Stmt.(*stmt.StmtList).Stmts
+		for i, stmtNode := range stmts {
+			if i == len(stmts) - 1 {
+				return d.eval(stmtNode)
+			}
+			d.eval(stmtNode)
+		}
+	}
+
+	stmts := ifNode.Else.(*stmt.Else).Stmt.(*stmt.StmtList).Stmts
+	for i, stmtNode := range stmts {
+		if i == len(stmts) - 1 {
+			return d.eval(stmtNode)
+		}
+		d.eval(stmtNode)
+	}
+
+	return ""
+}
+
+func (d *Detector) evalEqual(n *binary.Equal) string {
+	leftNode := n.Left
+	leftValue := d.eval(leftNode)
+
+	rightNode := n.Right
+	rightValue := d.eval(rightNode)
+
+	if leftValue == rightValue {
+		return "true"
+	}
+
+	return "false"
 }
 
 // FunctionCallノードで呼び出してるFunctionノードを探して返す

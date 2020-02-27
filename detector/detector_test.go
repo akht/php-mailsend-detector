@@ -120,6 +120,26 @@ func TestDetect(t *testing.T) {
 		$additional_headers = "追加ヘッダー";
 		$additional_parameter = "追加パラメタ";
 		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
+
+		// If文で変数の値を決定
+		`<?php
+		$to = "mail@example.com";
+		$subject = "This is a ";
+		$val = "1";
+		if ($val == "1") {
+			$subject = $subject . "Subject";
+		} else {
+			$subject = $subject . "fake Subject";
+		}
+		$val2 = "aaa";
+		if ($val2 == "bbb") {
+			$body = "This is not a Body";
+		} else {
+			$body = "This is a Body";
+		}
+		$additional_headers = "追加ヘッダー";
+		$additional_parameter = "追加パラメタ";
+		mb_send_mail($to, $subject, $body, $additional_headers, $additional_parameter);`,
 	}
 
 	expected := `[件名]:
