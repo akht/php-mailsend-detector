@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/akht/php-mailsend-detector/object"
 	myvisitor "github.com/akht/php-mailsend-detector/visitor"
 
 	"github.com/z7zmey/php-parser/node"
@@ -19,18 +20,24 @@ import (
 	"github.com/z7zmey/php-parser/visitor"
 )
 
+var (
+	NULL  = &object.Null{}
+	TRUE  = &object.Boolean{Value: true}
+	FALSE = &object.Boolean{Value: false}
+)
+
 type Detector struct {
 	src     io.Reader
 	parser  *php5.Parser
 	visitor myvisitor.Visitor
-	env     map[string]node.Node
+	env     map[string]object.Object
 }
 
 func NewDetector(src io.Reader) *Detector {
 	return &Detector{
 		src:     src,
 		visitor: myvisitor.Visitor{},
-		env:     make(map[string]node.Node),
+		env:     make(map[string]object.Object),
 	}
 }
 
@@ -75,11 +82,11 @@ func (d *Detector) inspectMailSend() string {
 	for i, arg := range d.visitor.MailArguments {
 		switch i {
 		case 0:
-			mail["to"] = d.env[arg].(*scalar.String).Value
+			mail["to"] = d.env[arg].(*object.String).Value
 		case 1:
-			mail["subject"] = d.env[arg].(*scalar.String).Value
+			mail["subject"] = d.env[arg].(*object.String).Value
 		case 2:
-			mail["body"] = d.env[arg].(*scalar.String).Value
+			mail["body"] = d.env[arg].(*object.String).Value
 		}
 	}
 
@@ -100,7 +107,7 @@ func (d *Detector) allNode() []node.Node {
 	return root.Stmts
 }
 
-func (d *Detector) eval(n node.Node) string {
+func (d *Detector) eval(n node.Node) object.Object {
 	switch n := n.(type) {
 	case *node.Root:
 		return d.evalProgram(n)
@@ -110,8 +117,8 @@ func (d *Detector) eval(n node.Node) string {
 
 	case *assign.Assign:
 		variableName := n.Variable.(*expr.Variable).VarName.(*node.Identifier).Value
-		expression := d.eval(n.Expression)
-		d.env[variableName] = &scalar.String{Value: expression}
+		obj := d.eval(n.Expression)
+		d.env[variableName] = obj
 
 	case *node.Identifier:
 		return d.evalIdentifier(n)
@@ -120,34 +127,32 @@ func (d *Detector) eval(n node.Node) string {
 		return d.findConstantValue(n)
 
 	case *binary.Concat:
-		return d.eval(n.Left) + d.eval(n.Right)
+		left := d.eval(n.Left)
+		right := d.eval(n.Right)
+		return d.evalInfixExpression(".", left, right)
 
 	case *scalar.String:
-		value := n.Value
-
-		if len(value) > 0 && (value[0] == '"' || value[0] == '\''){
-			value = value[1:]
-		}
-		if len(value) > 0 && (value[len(value)-1] == '"' || value[len(value)-1] == '\'') {
-			value = value[:len(value)-1]
-		}
-		return value
+		value := unwrapString(n.Value)
+		return &object.String{Value: value}
 
 	case *expr.Variable:
-		varName := d.eval(n.VarName)
-		return varName
+		return d.eval(n.VarName)
 
 	case *stmt.If:
 		return d.evalIf(n)
 
 	case *binary.Equal:
-		return d.evalEqual(n)
+		left := d.eval(n.Left)
+		right := d.eval(n.Right)
+		return d.evalInfixExpression("==", left, right)
 
 	case *expr.FunctionCall:
 		functionName := funcName(n)
 
-		if functionNode, ok := d.env[functionName]; ok {
-			return d.eval(functionNode)
+		for _, functionNode := range d.visitor.FunctionNodes {
+			if functionName == functionNode.FunctionName.(*node.Identifier).Value {
+				return d.eval(functionNode)
+			}
 		}
 
 		functionNode := d.findFunctionDefenition(functionName)
@@ -166,11 +171,11 @@ func (d *Detector) eval(n node.Node) string {
 		return d.eval(n.Expr)
 	}
 
-	return ""
+	return NULL
 }
 
-func (d *Detector) evalProgram(root *node.Root) string {
-	result := ""
+func (d *Detector) evalProgram(root *node.Root) object.Object {
+	var result object.Object
 
 	for _, statement := range root.Stmts {
 		result = d.eval(statement)
@@ -179,21 +184,21 @@ func (d *Detector) evalProgram(root *node.Root) string {
 	return result
 }
 
-func (d *Detector) evalIdentifier(ident *node.Identifier) string {
-	if n, ok := d.env[ident.Value]; ok {
-		return d.eval(n)
+func (d *Detector) evalIdentifier(ident *node.Identifier) object.Object {
+	if obj, ok := d.env[ident.Value]; ok {
+		return obj
 	}
 
-	return ""
+	return NULL
 }
 
-func (d * Detector) evalIf(ifNode *stmt.If) string {
+func (d *Detector) evalIf(ifNode *stmt.If) object.Object {
 	condition := d.eval(ifNode.Cond)
 
-	if condition == "true" {
+	if condition == TRUE {
 		stmts := ifNode.Stmt.(*stmt.StmtList).Stmts
 		for i, stmtNode := range stmts {
-			if i == len(stmts) - 1 {
+			if i == len(stmts)-1 {
 				return d.eval(stmtNode)
 			}
 			d.eval(stmtNode)
@@ -202,27 +207,99 @@ func (d * Detector) evalIf(ifNode *stmt.If) string {
 
 	stmts := ifNode.Else.(*stmt.Else).Stmt.(*stmt.StmtList).Stmts
 	for i, stmtNode := range stmts {
-		if i == len(stmts) - 1 {
+		if i == len(stmts)-1 {
 			return d.eval(stmtNode)
 		}
 		d.eval(stmtNode)
 	}
 
-	return ""
+	return NULL
 }
 
-func (d *Detector) evalEqual(n *binary.Equal) string {
-	leftNode := n.Left
-	leftValue := d.eval(leftNode)
+func (d *Detector) evalInfixExpression(operator string, left, right object.Object) object.Object {
+	switch {
+	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
+		return evalIntegerInfixExpression(operator, left, right)
 
-	rightNode := n.Right
-	rightValue := d.eval(rightNode)
+	case left.Type() == object.STRING_OBJ && right.Type() == object.STRING_OBJ:
+		return evalStringInfixExpression(operator, left, right)
 
-	if leftValue == rightValue {
-		return "true"
+	case operator == "==":
+		return nativeBoolToBooleanObject(left == right)
+
+	case operator == "!=":
+		return nativeBoolToBooleanObject(left != right)
+
+	default:
+		return NULL
+	}
+}
+
+func evalIntegerInfixExpression(operator string, left, right object.Object) object.Object {
+	leftVal := left.(*object.Integer).Value
+	rightVal := right.(*object.Integer).Value
+
+	switch operator {
+	case "+":
+		return &object.Integer{Value: leftVal + rightVal}
+
+	case "-":
+		return &object.Integer{Value: leftVal - rightVal}
+
+	case "*":
+		return &object.Integer{Value: leftVal * rightVal}
+
+	case "/":
+		return &object.Integer{Value: leftVal / rightVal}
+
+	case "<":
+		return nativeBoolToBooleanObject(leftVal < rightVal)
+
+	case ">":
+		return nativeBoolToBooleanObject(leftVal > rightVal)
+
+	case "==":
+		return nativeBoolToBooleanObject(leftVal == rightVal)
+
+	case "!=":
+		return nativeBoolToBooleanObject(leftVal != rightVal)
+
+	default:
+		return NULL
+	}
+}
+
+func evalStringInfixExpression(operator string, left, right object.Object) object.Object {
+	leftVal := left.(*object.String).Value
+	rightVal := right.(*object.String).Value
+
+	switch operator {
+	case ".":
+		return &object.String{Value: leftVal + rightVal}
+
+	case "<":
+		return nativeBoolToBooleanObject(leftVal < rightVal)
+
+	case ">":
+		return nativeBoolToBooleanObject(leftVal > rightVal)
+
+	case "==":
+		return nativeBoolToBooleanObject(leftVal == rightVal)
+
+	case "!=":
+		return nativeBoolToBooleanObject(leftVal != rightVal)
+
+	default:
+		return NULL
+	}
+}
+
+func nativeBoolToBooleanObject(input bool) *object.Boolean {
+	if input {
+		return TRUE
 	}
 
-	return "false"
+	return FALSE
 }
 
 // FunctionCallノードで呼び出してるFunctionノードを探して返す
@@ -237,7 +314,7 @@ func (d *Detector) findFunctionDefenition(functionName string) *stmt.Function {
 }
 
 // 変数に割り当てられている値を返す
-func (d *Detector) findVariableValue(name string) string {
+func (d *Detector) findVariableValue(name string) object.Object {
 	for _, assignNode := range d.visitor.AssignNodes {
 		variableNode := assignNode.Variable.(*expr.Variable)
 		variableName := variableNode.VarName.(*node.Identifier).Value
@@ -248,11 +325,11 @@ func (d *Detector) findVariableValue(name string) string {
 		return d.eval(assignNode)
 	}
 
-	return ""
+	return NULL
 }
 
 // 定数に割り当てられている値を返す
-func (d *Detector) findConstantValue(constFecthNode *expr.ConstFetch) string {
+func (d *Detector) findConstantValue(constFecthNode *expr.ConstFetch) object.Object {
 
 	nameNode := constFecthNode.Constant.(*name.Name)
 	partsNode := nameNode.Parts[0].(*name.NamePart)
@@ -263,7 +340,12 @@ func (d *Detector) findConstantValue(constFecthNode *expr.ConstFetch) string {
 		argument := argumentList.Arguments[0].(*node.Argument)
 		definedConstantName := d.eval(argument.Expr)
 
-		if definedConstantName != constantName {
+		stringObj, ok := definedConstantName.(*object.String)
+		if !ok {
+			continue
+		}
+
+		if stringObj.Value != constantName {
 			continue
 		}
 
@@ -271,7 +353,7 @@ func (d *Detector) findConstantValue(constFecthNode *expr.ConstFetch) string {
 		return d.eval(argument.Expr)
 	}
 
-	return ""
+	return NULL
 }
 
 // 関数呼び出しを復元する
@@ -323,4 +405,15 @@ func argVarNames(functionCallNode *expr.FunctionCall) []string {
 	}
 
 	return ret
+}
+
+func unwrapString(value string) string {
+	if len(value) > 0 && (value[0] == '"' || value[0] == '\'') {
+		value = value[1:]
+	}
+	if len(value) > 0 && (value[len(value)-1] == '"' || value[len(value)-1] == '\'') {
+		value = value[:len(value)-1]
+	}
+
+	return value
 }
