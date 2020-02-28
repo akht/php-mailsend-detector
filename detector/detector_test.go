@@ -29,11 +29,11 @@ func TestDetect(t *testing.T) {
 
 		// 関数の戻り値を代入
 		`<?php
-		$CONSTANT = "This is a Body";
+		$tmp = "This is a Body";
 
 		$to = "mail@example.com";
 		$subject = get_subject();
-		$body = $CONSTANT;
+		$body = $tmp;
 		$additional_headers = "追加ヘッダー";
 		$additional_parameter = "追加パラメタ";
 
